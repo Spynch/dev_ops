@@ -6,6 +6,11 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag override
+        required: false
+        type: string
 
 jobs:
   backend_test:
@@ -50,6 +55,7 @@ jobs:
   frontend_test:
     name: Frontend - Test
     runs-on: ubuntu-latest
+    needs: backend_build
     defaults:
       run:
         working-directory: client
@@ -97,9 +103,7 @@ jobs:
   docker_build_and_push:
     name: Docker - Build and Push
     runs-on: ubuntu-latest
-    needs:
-      - backend_build
-      - frontend_build
+    needs: frontend_build
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
 
     permissions:
@@ -107,9 +111,9 @@ jobs:
 
     env:
       CR_REGISTRY: ${{ secrets.YC_CR_REGISTRY_ID }}
-      SERVER_REPOSITORY: ${{ vars.YC_CR_SERVER_REPOSITORY }}
-      CLIENT_REPOSITORY: ${{ vars.YC_CR_CLIENT_REPOSITORY }}
-      IMAGE_TAG: ${{ github.event.release.tag_name || github.sha }}
+      SERVER_REPOSITORY: server-rep
+      CLIENT_REPOSITORY: client-rep
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.event.release.tag_name || github.sha }}
 
     steps:
       - uses: actions/checkout@v4
