@@ -130,19 +130,14 @@ jobs:
 
       - name: Build and push backend image
         run: |
-          docker build \
-            -t cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG \
-            ./server
+          docker build -t "cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG" ./server
 
           docker push \
             cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG
 
       - name: Build and push frontend image
         run: |
-          docker build \
-            --build-arg REACT_APP_API_URL= \
-            -t cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG \
-            ./client
+          docker build --build-arg REACT_APP_API_URL= -t "cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG" ./client
 
-          docker push \
-            cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG
+          docker push "cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG"
+          
