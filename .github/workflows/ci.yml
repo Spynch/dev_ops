@@ -3,31 +3,14 @@ name: CI
 on:
   push:
   pull_request:
+  release:
+    types: [created]
+  workflow_dispatch:
 
 jobs:
-  backend_build:
-    name: Backend - Build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-
-      - name: Build (skip tests)
-        run: mvn -B -DskipTests package
-
   backend_test:
     name: Backend - Test
     runs-on: ubuntu-latest
-    needs: backend_build
     defaults:
       run:
         working-directory: server
@@ -44,32 +27,29 @@ jobs:
       - name: Run unit tests
         run: mvn -B test
 
-  frontend_build:
-    name: Frontend - Build
+  backend_build:
+    name: Backend - Build
     runs-on: ubuntu-latest
+    needs: backend_test
     defaults:
       run:
-        working-directory: client
+        working-directory: server
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: client/package-lock.json
-
-      - name: Install deps
-        run: npm ci
+          distribution: temurin
+          java-version: "21"
+          cache: maven
 
       - name: Build
-        run: npm run build
+        run: mvn -B -DskipTests package
 
   frontend_test:
     name: Frontend - Test
     runs-on: ubuntu-latest
-    needs: frontend_build
     defaults:
       run:
         working-directory: client
@@ -91,3 +71,78 @@ jobs:
       - name: Run tests
         run: npm test -- --watchAll=false
 
+  frontend_build:
+    name: Frontend - Build
+    runs-on: ubuntu-latest
+    needs: frontend_test
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  docker_build_and_push:
+    name: Docker - Build and Push
+    runs-on: ubuntu-latest
+    needs:
+      - backend_build
+      - frontend_build
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+
+    permissions:
+      contents: read
+
+    env:
+      CR_REGISTRY: ${{ secrets.YC_CR_REGISTRY_ID }}
+      SERVER_REPOSITORY: ${{ vars.YC_CR_SERVER_REPOSITORY }}
+      CLIENT_REPOSITORY: ${{ vars.YC_CR_CLIENT_REPOSITORY }}
+      IMAGE_TAG: ${{ github.event.release.tag_name || github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Yandex Cloud Container Registry
+        uses: yc-actions/yc-cr-login@v3
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+      - name: Validate registry config
+        run: |
+          for v in CR_REGISTRY SERVER_REPOSITORY CLIENT_REPOSITORY; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Missing required value: $v"
+              exit 1
+            fi
+          done
+
+      - name: Build and push backend image
+        run: |
+          docker build \
+            -t cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG \
+            ./server
+
+          docker push \
+            cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG
+
+      - name: Build and push frontend image
+        run: |
+          docker build \
+            --build-arg REACT_APP_API_URL= \
+            -t cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG \
+            ./client
+
+          docker push \
+            cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG
