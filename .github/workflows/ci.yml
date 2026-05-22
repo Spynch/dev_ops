@@ -107,8 +107,8 @@ jobs:
 
     env:
       CR_REGISTRY: ${{ secrets.YC_CR_REGISTRY_ID }}
-      SERVER_REPOSITORY: ${{ vars.YC_CR_SERVER_REPOSITORY || 'server-rep' }}
-      CLIENT_REPOSITORY: ${{ vars.YC_CR_CLIENT_REPOSITORY || 'client-rep'}}
+      SERVER_REPOSITORY: ${{ vars.YC_CR_SERVER_REPOSITORY }}
+      CLIENT_REPOSITORY: ${{ vars.YC_CR_CLIENT_REPOSITORY }}
       IMAGE_TAG: ${{ github.event.release.tag_name || github.sha }}
 
     steps:
@@ -121,6 +121,9 @@ jobs:
 
       - name: Validate registry config
         run: |
+          CR_REGISTRY="$(printf '%s' "$CR_REGISTRY" | tr -d '\r\n')"
+          SERVER_REPOSITORY="$(printf '%s' "${SERVER_REPOSITORY:-server-rep}" | tr -d '\r\n')"
+          CLIENT_REPOSITORY="$(printf '%s' "${CLIENT_REPOSITORY:-client-rep}" | tr -d '\r\n')"
           for v in CR_REGISTRY SERVER_REPOSITORY CLIENT_REPOSITORY; do
             if [ -z "${!v}" ]; then
               echo "::error::Missing required value: $v"
@@ -130,14 +133,18 @@ jobs:
 
       - name: Build and push backend image
         run: |
-          docker build -t "cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG" ./server
-
-          docker push \
-            cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG
+          CR_REGISTRY="$(printf '%s' "$CR_REGISTRY" | tr -d '\r\n')"
+          SERVER_REPOSITORY="$(printf '%s' "${SERVER_REPOSITORY:-server-rep}" | tr -d '\r\n')"
+          IMAGE_TAG="$(printf '%s' "$IMAGE_TAG" | tr -d '\r\n')"
+          IMAGE="cr.yandex/$CR_REGISTRY/$SERVER_REPOSITORY:$IMAGE_TAG"
+          docker build -t "$IMAGE" ./server
+          docker push "$IMAGE"
 
       - name: Build and push frontend image
         run: |
-          docker build --build-arg REACT_APP_API_URL= -t "cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG" ./client
-
-          docker push "cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG"
-          
+          CR_REGISTRY="$(printf '%s' "$CR_REGISTRY" | tr -d '\r\n')"
+          CLIENT_REPOSITORY="$(printf '%s' "${CLIENT_REPOSITORY:-client-rep}" | tr -d '\r\n')"
+          IMAGE_TAG="$(printf '%s' "$IMAGE_TAG" | tr -d '\r\n')"
+          IMAGE="cr.yandex/$CR_REGISTRY/$CLIENT_REPOSITORY:$IMAGE_TAG"
+          docker build --build-arg REACT_APP_API_URL= -t "$IMAGE" ./client
+          docker push "$IMAGE"
